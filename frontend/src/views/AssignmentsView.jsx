@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../context/DataContext';
-import { LoadingState, EmptyState } from '../components/StateMessages';
+import { LoadingState, EmptyState, ErrorState } from '../components/StateMessages';
 
 export function AssignmentsView({ onEditItem, onDeleteItem, onAddNew }) {
-  const { assignments, loading } = useData();
+  const { assignments, loading, errors, fetchSection } = useData();
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -25,6 +25,9 @@ export function AssignmentsView({ onEditItem, onDeleteItem, onAddNew }) {
 
   if (loading.assignments && assignments.length === 0) {
     return <LoadingState message="Accessing academic coursework log, deadlines, and grade records..." />;
+  }
+  if (errors.assignments && assignments.length === 0) {
+    return <ErrorState message={errors.assignments} onRetry={() => fetchSection('assignments')} />;
   }
 
   return (

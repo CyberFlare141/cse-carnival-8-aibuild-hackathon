@@ -141,8 +141,8 @@ export function AppContent() {
         {isBackendOnline === false && (
           <div className="offline-banner">
             <div>
-              <strong>⚠️ REGISTRY DISCONNECTED:</strong> Unable to connect to Express backend at <code>http://localhost:4000/api</code>.
-              Ensure your backend service is running on port 4000.
+              <strong>⚠️ REGISTRY DISCONNECTED:</strong> Unable to connect to the CampusOS FastAPI backend.
+              Ensure the configured API service is running.
             </div>
             <button
               type="button"

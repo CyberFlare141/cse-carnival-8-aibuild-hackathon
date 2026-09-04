@@ -175,15 +175,16 @@ def cancel_room_booking(db: Session, booking_id: str) -> dict:
 
 def find_available_rooms(
     db: Session,
-    target_date: date,
-    start_time: time,
-    end_time: time,
+    target_date: Optional[date] = None,
+    start_time: Optional[time] = None,
+    end_time: Optional[time] = None,
     min_capacity: Optional[int] = None,
     equipment: Optional[str] = None,
     room_type: Optional[str] = None
 ) -> list[dict]:
     """
-    Finds all rooms matching criteria that are free on the given date and time window.
+    Finds rooms matching criteria. When a complete date/time window is supplied,
+    results are additionally filtered to rooms free in that window.
     """
     query = db.query(Room).filter(Room.status == "available")
 
@@ -196,7 +197,13 @@ def find_available_rooms(
     rooms = query.all()
     available_rooms = []
 
-    day_of_week = target_date.strftime("%A")
+    checking_availability = target_date is not None and start_time is not None and end_time is not None
+    if any(value is not None for value in (target_date, start_time, end_time)) and not checking_availability:
+        raise ValueError("target_date, start_time, and end_time must be supplied together.")
+    if checking_availability and start_time >= end_time:
+        raise ValueError("start_time must be earlier than end_time.")
+
+    day_of_week = target_date.strftime("%A") if checking_availability else None
 
     for room in rooms:
         # Check equipment inside JSON array string
@@ -210,26 +217,25 @@ def find_available_rooms(
                 if equipment.lower() not in room.equipment.lower():
                     continue
 
-        # Check booking conflict
-        conflict_booking = db.query(RoomBooking).filter(
-            RoomBooking.room_id == room.id,
-            RoomBooking.date == target_date,
-            RoomBooking.status == "confirmed",
-            RoomBooking.start_time < end_time,
-            RoomBooking.end_time > start_time
-        ).first()
-        if conflict_booking:
-            continue
+        if checking_availability:
+            conflict_booking = db.query(RoomBooking).filter(
+                RoomBooking.room_id == room.id,
+                RoomBooking.date == target_date,
+                RoomBooking.status == "confirmed",
+                RoomBooking.start_time < end_time,
+                RoomBooking.end_time > start_time
+            ).first()
+            if conflict_booking:
+                continue
 
-        # Check schedule conflict
-        conflict_schedule = db.query(Schedule).filter(
-            Schedule.room == room.room_number,
-            Schedule.day == day_of_week,
-            Schedule.start_time < end_time,
-            Schedule.end_time > start_time
-        ).first()
-        if conflict_schedule:
-            continue
+            conflict_schedule = db.query(Schedule).filter(
+                Schedule.room == room.room_number,
+                Schedule.day == day_of_week,
+                Schedule.start_time < end_time,
+                Schedule.end_time > start_time
+            ).first()
+            if conflict_schedule:
+                continue
 
         try:
             eq_parsed = json.loads(room.equipment)

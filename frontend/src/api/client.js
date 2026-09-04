@@ -3,7 +3,17 @@
  * Configurable base URL with resilient payload/response normalizers
  */
 
-const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:4000/api').replace(/\/+$/, '');
+// Keep the server location in one place. VITE_API_URL can override this for
+// deployment, while the default matches the FastAPI run command in the repo.
+const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace(/\/+$/, '');
+
+function readErrorMessage(data, fallback) {
+  const detail = data?.error || data?.message || data?.detail;
+  if (Array.isArray(detail)) {
+    return detail.map((item) => item?.msg || String(item)).join('; ');
+  }
+  return detail || fallback;
+}
 
 /**
  * Standard fetch helper with JSON parsing and structured error handling
@@ -43,9 +53,7 @@ async function request(endpoint, options = {}) {
     }
 
     if (!response.ok) {
-      const errorMsg =
-        (data && (data.error || data.message || data.detail)) ||
-        `HTTP Error ${response.status}: ${response.statusText}`;
+      const errorMsg = readErrorMessage(data, `HTTP Error ${response.status}: ${response.statusText}`);
       const err = new Error(errorMsg);
       err.status = response.status;
       err.data = data;
@@ -57,7 +65,7 @@ async function request(endpoint, options = {}) {
     if (err.name === 'TypeError' && err.message.includes('fetch')) {
       console.warn(`[CampusOS API] Network error connecting to ${url}`);
       const netErr = new Error(
-        `Unable to reach CampusOS backend at ${BASE_URL}. Ensure your Express server is running.`
+        `Unable to reach the CampusOS FastAPI backend at ${BASE_URL}. Ensure it is running.`
       );
       netErr.isNetworkError = true;
       throw netErr;
@@ -191,7 +199,7 @@ export const api = {
   // --- Health / Ping check ---
   async checkHealth() {
     try {
-      const res = await fetch(`${BASE_URL}/schedule`, { method: 'GET', signal: AbortSignal.timeout(3000) });
+      const res = await fetch(`${BASE_URL}/schedules`, { method: 'GET', signal: AbortSignal.timeout(3000) });
       return res.ok;
     } catch {
       return false;
@@ -200,7 +208,7 @@ export const api = {
 
   // --- 1. Schedule ---
   async getSchedule() {
-    const data = await request('/schedule');
+    const data = await request('/schedules');
     const list = Array.isArray(data) ? data : data.schedule || [];
     return list.map(normalizeSchedule);
   },
@@ -217,7 +225,7 @@ export const api = {
       start_time: payload.start_time || payload.time?.split('-')[0]?.trim() || '',
       end_time: payload.end_time || payload.time?.split('-')[1]?.trim() || '',
     };
-    const res = await request('/schedule', {
+    const res = await request('/schedules', {
       method: 'POST',
       body: JSON.stringify(body),
     });
@@ -236,7 +244,7 @@ export const api = {
       start_time: payload.start_time,
       end_time: payload.end_time,
     };
-    const res = await request(`/schedule/${id}`, {
+    const res = await request(`/schedules/${id}`, {
       method: 'PUT',
       body: JSON.stringify(body),
     });
@@ -244,7 +252,7 @@ export const api = {
   },
 
   async deleteSchedule(id) {
-    return await request(`/schedule/${id}`, { method: 'DELETE' });
+    return await request(`/schedules/${id}`, { method: 'DELETE' });
   },
 
   // --- 2. Rooms ---
@@ -488,12 +496,12 @@ export const api = {
   async sendChatMessage(message, history = []) {
     const body = {
       message,
-      history: history.map((msg) => ({
-        role: msg.role,
+      conversation_history: history.map((msg) => ({
+        role: msg.role === 'agent' ? 'assistant' : msg.role,
         content: msg.content || msg.text || '',
       })),
     };
-    const res = await request('/agent/chat', {
+    const res = await request('/chat', {
       method: 'POST',
       body: JSON.stringify(body),
     });
@@ -505,6 +513,8 @@ export const api = {
         ? res.toolCalls
         : Array.isArray(res.tool_calls)
         ? res.tool_calls
+        : Array.isArray(res.tools_called)
+        ? res.tools_called
         : [],
     };
   },

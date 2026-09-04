@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../context/DataContext';
-import { LoadingState, EmptyState } from '../components/StateMessages';
+import { LoadingState, EmptyState, ErrorState } from '../components/StateMessages';
 
 export function ScheduleView({ onEditItem, onDeleteItem, onAddNew }) {
-  const { schedule, loading } = useData();
+  const { schedule, loading, errors, fetchSection } = useData();
   const [selectedDay, setSelectedDay] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -25,6 +25,9 @@ export function ScheduleView({ onEditItem, onDeleteItem, onAddNew }) {
 
   if (loading.schedule && schedule.length === 0) {
     return <LoadingState message="Accessing class timetable registries for all university departments..." />;
+  }
+  if (errors.schedule && schedule.length === 0) {
+    return <ErrorState message={errors.schedule} onRetry={() => fetchSection('schedule')} />;
   }
 
   return (

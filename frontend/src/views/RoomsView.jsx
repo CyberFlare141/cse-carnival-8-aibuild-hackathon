@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../context/DataContext';
-import { LoadingState, EmptyState } from '../components/StateMessages';
+import { LoadingState, EmptyState, ErrorState } from '../components/StateMessages';
 
 export function RoomsView({ onEditItem, onDeleteItem, onAddNew, onOpenBookModal }) {
-  const { rooms, loading, cancelBooking } = useData();
+  const { rooms, loading, errors, fetchSection, cancelBooking } = useData();
   const [selectedType, setSelectedType] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedRoomId, setExpandedRoomId] = useState(null);
@@ -35,6 +35,9 @@ export function RoomsView({ onEditItem, onDeleteItem, onAddNew, onOpenBookModal 
 
   if (loading.rooms && rooms.length === 0) {
     return <LoadingState message="Inspecting physical campus facilities, equipment manifests, and room reservation ledgers..." />;
+  }
+  if (errors.rooms && rooms.length === 0) {
+    return <ErrorState message={errors.rooms} onRetry={() => fetchSection('rooms')} />;
   }
 
   return (

@@ -1,4 +1,5 @@
 import logging
+import time as time_module
 from typing import Any, Optional
 from datetime import datetime, date, time
 from sqlalchemy.orm import Session
@@ -10,6 +11,27 @@ from backend.config import settings
 from backend.services import db_service
 
 logger = logging.getLogger(__name__)
+
+
+def generate_content_with_retry(client: genai.Client, contents: list, config: types.GenerateContentConfig):
+    """Retry short-lived Gemini capacity/rate-limit failures before failing chat."""
+    for attempt in range(3):
+        try:
+            return client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=contents,
+                config=config
+            )
+        except Exception as exc:
+            # A 503 is usually a short provider-capacity spike. A 429 quota
+            # exhaustion is not transient for this request, so retrying it
+            # merely consumes time and makes the user wait longer.
+            transient = "503" in str(exc) or "UNAVAILABLE" in str(exc)
+            if not transient or attempt == 2:
+                raise
+            delay = attempt + 1
+            logger.warning("Gemini temporarily unavailable; retrying in %s second(s).", delay)
+            time_module.sleep(delay)
 
 # ---------------------------------------------------------------------------
 # 1. System Prompt
@@ -31,6 +53,8 @@ CRITICAL RULES:
    - If an event is full or cancelled, inform the student directly.
 6. Never claim an action succeeded unless the tool returned a successful result.
 7. Be concise, friendly, and helpful.
+8. Schedule queries refer to the schedule held in CampusOS. For "When is my next class?", retrieve the full schedule and determine the next occurrence from the current server date/time supplied below; do not ask for course, section, or a date unless the data is genuinely insufficient.
+9. For a room attribute query such as "Which labs have a projector and can fit at least 30 people?", call find_available_rooms without a date/time. It will return matching rooms without making an availability claim. Only supply date and time when the user asks whether a room is free or asks to book one.
 """
 
 # ---------------------------------------------------------------------------
@@ -53,11 +77,10 @@ FUNCTION_DECLARATIONS = [
         description="Find vacant campus rooms on a given date and time window that satisfy capacity, room type, and equipment requirements.",
         parameters=types.Schema(
             type="OBJECT",
-            required=["date", "start_time", "end_time"],
             properties={
-                "date": types.Schema(type="STRING", description="Target date in YYYY-MM-DD format"),
-                "start_time": types.Schema(type="STRING", description="24-hour start time in HH:MM format (e.g. '14:00')"),
-                "end_time": types.Schema(type="STRING", description="24-hour end time in HH:MM format (e.g. '16:00')"),
+                "date": types.Schema(type="STRING", description="Optional target date in YYYY-MM-DD format. Supply it with both times only when availability is requested."),
+                "start_time": types.Schema(type="STRING", description="Optional 24-hour start time HH:MM; requires date and end_time."),
+                "end_time": types.Schema(type="STRING", description="Optional 24-hour end time HH:MM; requires date and start_time."),
                 "min_capacity": types.Schema(type="INTEGER", description="Minimum number of seats required"),
                 "equipment": types.Schema(type="STRING", description="Required equipment item (e.g. 'projector', 'computers', 'AC', 'smart board')"),
                 "room_type": types.Schema(type="STRING", description="Room type: 'classroom', 'lab', or 'seminar'")
@@ -167,9 +190,12 @@ def execute_tool(name: str, args: dict[str, Any], db: Session) -> Any:
                 course=args.get("course")
             )
         elif name == "find_available_rooms":
-            d = db_service.parse_date(args["date"])
-            st = db_service.parse_time(args["start_time"])
-            et = db_service.parse_time(args["end_time"])
+            has_time_window = all(args.get(key) for key in ("date", "start_time", "end_time"))
+            if any(args.get(key) for key in ("date", "start_time", "end_time")) and not has_time_window:
+                return {"error": "date, start_time, and end_time must be supplied together when checking availability."}
+            d = db_service.parse_date(args["date"]) if has_time_window else None
+            st = db_service.parse_time(args["start_time"]) if has_time_window else None
+            et = db_service.parse_time(args["end_time"]) if has_time_window else None
             return db_service.find_available_rooms(
                 db,
                 target_date=d,
@@ -273,17 +299,16 @@ def process_chat(
 
     config = types.GenerateContentConfig(
         tools=GEMINI_TOOLS,
-        system_instruction=SYSTEM_INSTRUCTION,
+        system_instruction=(
+            f"{SYSTEM_INSTRUCTION}\n\n"
+            f"Current server date and time: {datetime.now().strftime('%A, %Y-%m-%d %H:%M')}."
+        ),
         temperature=0.2
     )
 
     try:
         # Step 1: Call model with tool definitions
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=contents,
-            config=config
-        )
+        response = generate_content_with_retry(client, contents, config)
 
         # Step 2: Handle function calls if model requested any
         while response.function_calls:
@@ -313,11 +338,7 @@ def process_chat(
 
             # Send tool outputs back to model
             contents.append(types.Content(role="user", parts=tool_response_parts))
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=contents,
-                config=config
-            )
+            response = generate_content_with_retry(client, contents, config)
 
         final_reply = response.text or "I have processed your request."
         return {
@@ -328,6 +349,7 @@ def process_chat(
     except Exception as e:
         logger.error(f"Error in Gemini agent interaction: {e}")
         return {
-            "reply": f"An error occurred while communicating with the AI agent: {str(e)}",
-            "tools_called": tools_called
+            "reply": "The AI service is temporarily unavailable. Please try again shortly.",
+            "tools_called": tools_called,
+            "error": True
         }
