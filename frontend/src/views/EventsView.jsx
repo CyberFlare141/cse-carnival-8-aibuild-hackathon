@@ -119,7 +119,7 @@ export function EventsView({ onEditItem, onDeleteItem, onAddNew, onOpenRegisterM
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div className="event-action-row" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"
@@ -174,7 +174,7 @@ export function EventsView({ onEditItem, onDeleteItem, onAddNew, onOpenRegisterM
 
                 {/* Registrants Roster */}
                 <div className="registrants-tray">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div className="registrant-action-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <button
                       type="button"
                       onClick={() => toggleExpand(evt.id)}

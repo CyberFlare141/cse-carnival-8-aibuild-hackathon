@@ -1,7 +1,7 @@
 import React from 'react';
 import { useData } from '../context/DataContext';
 
-export function Sidebar({ currentTab, onSelectTab, isMobileOpen, onCloseMobile }) {
+export function Sidebar({ currentTab, onSelectTab, isMobileOpen, onCloseMobile, onGoToLanding, showLandingLink = true }) {
   const { schedule, rooms, events, announcements, assignments, isBackendOnline, fetchAll } = useData();
 
   const navItems = [
@@ -16,7 +16,12 @@ export function Sidebar({ currentTab, onSelectTab, isMobileOpen, onCloseMobile }
   return (
     <aside className={`sidebar ${isMobileOpen ? 'mobile-open' : ''}`}>
       <div className="sidebar-masthead">
-        <div className="masthead-emblem">
+        <div
+          className="masthead-emblem"
+          onClick={onGoToLanding}
+          style={{ cursor: onGoToLanding ? 'pointer' : 'default' }}
+          title={onGoToLanding ? 'Go to Public Landing Page' : undefined}
+        >
           <div className="masthead-seal">C</div>
           <span className="masthead-title">CampusOS</span>
         </div>
@@ -25,6 +30,33 @@ export function Sidebar({ currentTab, onSelectTab, isMobileOpen, onCloseMobile }
           <span>AUST Academic Engine</span>
           <span>✦</span>
         </div>
+
+        {onGoToLanding && showLandingLink && (
+          <button
+            type="button"
+            onClick={onGoToLanding}
+            style={{
+              marginTop: '10px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1.5px solid var(--accent-purple)',
+              borderRadius: 'var(--radius-pill)',
+              color: 'var(--accent-cyan)',
+              fontSize: '11px',
+              fontWeight: 800,
+              padding: '4px 12px',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              letterSpacing: '0.04em',
+              transition: 'all 0.15s ease',
+            }}
+            title="Back"
+          >
+            <span>←</span>
+            <span>Back</span>
+          </button>
+        )}
       </div>
 
       <nav className="sidebar-nav">
@@ -32,7 +64,7 @@ export function Sidebar({ currentTab, onSelectTab, isMobileOpen, onCloseMobile }
           <span>⚡</span>
           <span>DASHBOARD PORTALS</span>
         </div>
-        {navItems.map((item, idx) => {
+        {navItems.map((item) => {
           const isActive = currentTab === item.id;
           return (
             <button
