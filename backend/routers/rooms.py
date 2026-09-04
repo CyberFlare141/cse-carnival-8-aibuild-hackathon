@@ -14,6 +14,19 @@ from backend.services import db_service
 
 router = APIRouter(prefix="/rooms", tags=["Rooms"])
 
+
+def room_response(room: Room, db: Session) -> dict:
+    return {
+        "id": room.id,
+        "room_number": room.room_number,
+        "type": room.type,
+        "capacity": room.capacity,
+        "equipment": room.equipment,
+        "floor": room.floor,
+        "status": room.status,
+        "bookings": db_service.get_room_occupancies(db, room),
+    }
+
 @router.get("", response_model=list[RoomResponse])
 def get_rooms(
     type: Optional[str] = Query(None, description="Filter by room type: classroom, lab, seminar"),
@@ -28,21 +41,22 @@ def get_rooms(
         query = query.filter(Room.capacity >= min_capacity)
 
     rooms = query.order_by(Room.floor, Room.room_number).all()
+    room_responses = [room_response(room, db) for room in rooms]
 
     if equipment:
         filtered = []
         eq_lower = equipment.lower()
-        for r in rooms:
+        for r, response in zip(rooms, room_responses):
             try:
                 eqs = json.loads(r.equipment)
                 if any(eq_lower == item.lower() for item in eqs):
-                    filtered.append(r)
+                    filtered.append(response)
             except Exception:
                 if eq_lower in r.equipment.lower():
-                    filtered.append(r)
+                    filtered.append(response)
         return filtered
 
-    return rooms
+    return room_responses
 
 @router.get("/{room_id}", response_model=RoomResponse)
 def get_room(room_id: str, db: Session = Depends(get_db)):
@@ -54,7 +68,7 @@ def get_room(room_id: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Room '{room_id}' not found."
         )
-    return room
+    return room_response(room, db)
 
 @router.post("", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)
 def create_room(room_in: RoomCreate, db: Session = Depends(get_db)):

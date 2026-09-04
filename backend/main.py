@@ -44,6 +44,16 @@ app.include_router(assignments.router, prefix=settings.API_PREFIX)
 app.include_router(chat.router, prefix=settings.API_PREFIX)
 
 
+@app.get("/", tags=["Health"])
+def root():
+    return {
+        "status": "healthy",
+        "service": settings.PROJECT_NAME,
+        "docs": "/docs",
+        "health": "/api/health",
+    }
+
+
 @app.get("/api/health", tags=["Health"])
 def health_check():
     return {

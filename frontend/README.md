@@ -29,7 +29,7 @@ The application will be running at: **`http://localhost:5173`**.
 
 ## 2. Pointing to a Different Backend URL via `.env`
 
-The frontend talks directly to the Express backend API via `fetch`. By default, it targets `http://localhost:4000/api`.
+The frontend talks directly to the FastAPI backend API via `fetch`. By default, it targets `http://localhost:8000/api`.
 
 To point the frontend to a different backend URL (e.g. a remote server or a different local port):
 
@@ -41,7 +41,7 @@ To point the frontend to a different backend URL (e.g. a remote server or a diff
 2. Open `.env` and set `VITE_API_URL` to your desired backend API endpoint:
    ```env
    # Set your custom backend URL here:
-   VITE_API_URL=http://localhost:4000/api
+  VITE_API_URL=http://localhost:8000/api
 
    # Examples for remote / staging servers:
    # VITE_API_URL=https://api.campusos.university.edu/api
@@ -94,7 +94,7 @@ CampusOS uses a **Maximalism / Dopamine Design** system ("Controlled Chaos", "Vi
 The frontend seamlessly connects to the Express backend specification:
 
 ### Base URL
-`http://localhost:4000/api` (or `VITE_API_URL`)
+`http://localhost:8000/api` (or `VITE_API_URL`)
 
 ### CRUD Resources
 Each resource supports `GET /:resource`, `POST /:resource`, `PUT /:resource/:id`, and `DELETE /:resource/:id`:

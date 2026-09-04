@@ -74,6 +74,9 @@ class BookingResponse(BaseModel):
     end_time: str
     purpose: str
     status: Optional[str] = "confirmed"
+    source_type: Optional[str] = "room_booking"
+    title: Optional[str] = None
+    event_id: Optional[str] = None
 
     @field_validator("date", mode="before")
     def validate_date(cls, v):
@@ -153,6 +156,10 @@ class RoomResponse(BaseModel):
             except Exception:
                 return [s.strip() for s in v.split(",") if s.strip()]
         return v or []
+
+    @field_validator("bookings", mode="before")
+    def active_bookings_only(cls, v):
+        return [booking for booking in (v or []) if getattr(booking, "status", None) == "confirmed" or (isinstance(booking, dict) and booking.get("status") == "confirmed")]
 
     class Config:
         from_attributes = True
@@ -323,12 +330,12 @@ class AnnouncementResponse(AnnouncementBase):
 # ---------------------------------------------------------------------------
 class AssignmentBase(BaseModel):
     course: str
-    course_title: str
     title: str
-    description: str
-    assigned_date: str
     deadline: str
-    submission_platform: str
+    course_title: str = ""
+    description: str = ""
+    assigned_date: str = Field(default_factory=lambda: date.today().isoformat())
+    submission_platform: str = "Campus Portal"
     status: str = "pending"
     marks: int = 0
 
@@ -338,13 +345,6 @@ class AssignmentBase(BaseModel):
 
 class AssignmentCreate(AssignmentBase):
     id: Optional[str] = None
-    assigned_date: Optional[str] = None
-
-    @field_validator("assigned_date", mode="before")
-    def validate_assigned_date(cls, v):
-        if not v:
-            return date.today().isoformat()
-        return format_date(v)
 
 class AssignmentUpdate(BaseModel):
     course: Optional[str] = None

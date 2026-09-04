@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 
 from backend.database import get_db
 from backend.models import Event, EventRegistration
@@ -66,12 +66,21 @@ def create_event(event_in: EventCreate, db: Session = Depends(get_db)):
         ev_id = f"evt-{next_num:03d}"
 
     edate = parse_date(event_in.date)
+    if edate < date.today():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event date cannot be in the past.")
     # A single-day event defaults its end date to its start date, as specified
     # by the data schema.  Avoid passing None into the date parser when the
     # frontend omits the optional field.
     end_date = parse_date(event_in.end_date or event_in.date)
-    st = parse_time(event_in.start_time)
-    et = parse_time(event_in.end_time)
+    if event_in.time:
+        start_value, end_value = split_time_range(event_in.time)
+    else:
+        start_value, end_value = event_in.start_time, event_in.end_time
+    st = parse_time(start_value)
+    et = parse_time(end_value)
+    db_service.ensure_start_is_current_or_future(
+        edate, st, "Event start time cannot be in the past."
+    )
 
     if st >= et:
         raise HTTPException(
@@ -83,6 +92,17 @@ def create_event(event_in: EventCreate, db: Session = Depends(get_db)):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="capacity cannot be negative."
         )
+    if event_in.capacity <= 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="capacity must be greater than zero.")
+
+    if event_in.venue:
+        db.execute(
+            db_service.text("SELECT id FROM dbo.Rooms WITH (UPDLOCK, HOLDLOCK) WHERE id = :venue OR room_number = :venue"),
+            {"venue": event_in.venue}
+        )
+        available, reason, _ = db_service.check_venue_availability(db, event_in.venue, edate, st, et)
+        if not available:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=reason)
 
     new_event = Event(
         id=ev_id,
@@ -120,6 +140,8 @@ def update_event(event_id: str, event_in: EventUpdate, db: Session = Depends(get
         data["end_time"] = end_time
     if "date" in data and data["date"] is not None:
         data["date"] = parse_date(data["date"])
+        if data["date"] < date.today():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event date cannot be in the past.")
     if "end_date" in data and data["end_date"] is not None:
         data["end_date"] = parse_date(data["end_date"])
     if "start_time" in data and data["start_time"] is not None:
@@ -140,11 +162,31 @@ def update_event(event_id: str, event_in: EventUpdate, db: Session = Depends(get
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="capacity cannot be negative."
             )
+        if data["capacity"] <= 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="capacity must be greater than zero.")
         if data["capacity"] < event.registered:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="capacity cannot be lower than the current registered count."
             )
+
+    target_date = data.get("date", event.date)
+    if target_date < date.today():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Event date cannot be in the past.")
+    db_service.ensure_start_is_current_or_future(
+        target_date, start_time, "Event start time cannot be in the past."
+    )
+    target_venue = data.get("venue", event.venue)
+    if target_venue:
+        db.execute(
+            db_service.text("SELECT id FROM dbo.Rooms WITH (UPDLOCK, HOLDLOCK) WHERE id = :venue OR room_number = :venue"),
+            {"venue": target_venue}
+        )
+        available, reason, _ = db_service.check_venue_availability(
+            db, target_venue, target_date, start_time, end_time, exclude_event_id=event.id
+        )
+        if not available:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=reason)
 
     for field, val in data.items():
         setattr(event, field, val)
@@ -162,7 +204,6 @@ def delete_event(event_id: str, db: Session = Depends(get_db)):
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Event '{event_id}' not found."
         )
-
     db.delete(event)
     db.commit()
     return {"message": f"Event '{event_id}' successfully deleted.", "id": event_id}

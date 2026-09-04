@@ -100,9 +100,14 @@ export function normalizeSchedule(item) {
 export function normalizeRoom(item) {
   if (!item) return null;
   const bookings = Array.isArray(item.bookings)
-    ? item.bookings.map((b, idx) => ({
+    ? item.bookings.filter((b) => (b.status || 'confirmed').toLowerCase() === 'confirmed').map((b, idx) => ({
         id: b.id || b.booking_id || `bk-${idx}`,
         booking_id: b.booking_id || b.id || `bk-${idx}`,
+        sourceType: b.source_type || b.sourceType || 'room_booking',
+        source_type: b.source_type || b.sourceType || 'room_booking',
+        title: b.title || '',
+        eventId: b.event_id || b.eventId || null,
+        event_id: b.event_id || b.eventId || null,
         date: b.date || '',
         startTime: b.startTime || b.start_time || '',
         start_time: b.start_time || b.startTime || '',
@@ -458,6 +463,7 @@ export const api = {
       course_title: payload.course_title || '',
       title: payload.title,
       description: payload.description || '',
+      assigned_date: payload.assigned_date || new Date().toLocaleDateString('en-CA'),
       deadline: payload.deadline,
       status: payload.status || 'pending',
       submission_platform: payload.submission_platform || 'Campus Portal',

@@ -165,18 +165,17 @@ export function ChatView() {
       }
     } catch (err) {
       console.error('[CampusOS Chat] Error:', err);
-      setErrorBanner(
-        err.message ||
-          'Failed to reach CampusOS agent. Verify that POST /api/chat is available on the backend.'
-      );
+      const errorMessage = err.isNetworkError
+        ? 'Could not reach CampusOS backend.'
+        : err.message || 'CampusOS Agent request failed.';
+      setErrorBanner(errorMessage);
       // Append a helpful error message in the chat
       setMessages((prev) => [
         ...prev,
         {
           id: 'err-' + Date.now(),
           role: 'agent',
-          content:
-            "I could not reach the CampusOS agent service (POST /api/chat). Please ensure the FastAPI backend is running.",
+          content: errorMessage,
           toolCalls: [],
           isError: true,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
