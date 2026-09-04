@@ -5,6 +5,8 @@ export function RecordModal({ isOpen, mode = 'add', section, initialData = null,
   const [submitting, setSubmitting] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [shakeKey, setShakeKey] = useState(0);
+  const today = new Date().toLocaleDateString('en-CA');
+  const currentTime = new Date().toTimeString().slice(0, 5);
 
   useEffect(() => {
     if (!isOpen) {
@@ -114,6 +116,13 @@ export function RecordModal({ isOpen, mode = 'add', section, initialData = null,
       setShakeKey((k) => k + 1);
       return;
     }
+    if (section === 'events') {
+      if (formData.date < today) return setValidationError('Event date cannot be in the past.');
+      const [start, end] = (formData.time || '').split('-').map((value) => value.trim());
+      if (!start || !end || start >= end) return setValidationError('Start time must be earlier than end time.');
+      if (formData.date === today && start < currentTime) return setValidationError('Event start time cannot be in the past.');
+      if (Number(formData.capacity) <= 0) return setValidationError('Capacity must be greater than zero.');
+    }
     if (section === 'announcements' && (!formData.title || !formData.body)) {
       setValidationError('Please provide both announcement headline and body text.');
       setShakeKey((k) => k + 1);
@@ -122,6 +131,10 @@ export function RecordModal({ isOpen, mode = 'add', section, initialData = null,
     if (section === 'assignments' && (!formData.course || !formData.title || !formData.deadline)) {
       setValidationError('Please provide course code, assignment title, and deadline.');
       setShakeKey((k) => k + 1);
+      return;
+    }
+    if (section === 'assignments' && formData.deadline < today) {
+      setValidationError('Deadline cannot be before today.');
       return;
     }
 
@@ -406,6 +419,7 @@ export function RecordModal({ isOpen, mode = 'add', section, initialData = null,
                       className="form-input"
                       value={formData.date || ''}
                       onChange={handleChange}
+                      min={today}
                       required
                     />
                   </div>

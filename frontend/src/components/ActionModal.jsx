@@ -7,6 +7,8 @@ export function ActionModal({ isOpen, type, targetItem, onClose, onConfirm }) {
   const [formData, setFormData] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const today = new Date().toLocaleDateString('en-CA');
+  const currentTime = new Date().toTimeString().slice(0, 5);
 
   useEffect(() => {
     if (!isOpen) {
@@ -17,7 +19,6 @@ export function ActionModal({ isOpen, type, targetItem, onClose, onConfirm }) {
     }
 
     if (type === 'book-room') {
-      const today = new Date().toISOString().split('T')[0];
       setFormData({
         date: today,
         startTime: '13:00',
@@ -44,10 +45,12 @@ export function ActionModal({ isOpen, type, targetItem, onClose, onConfirm }) {
     setError('');
 
     if (type === 'book-room') {
-      if (!formData.bookedBy || !formData.date || !formData.startTime || !formData.endTime) {
+      if (!formData.bookedBy?.trim() || !formData.date || !formData.startTime || !formData.endTime) {
         setError('Please complete all booking fields.');
         return;
       }
+      if (formData.date < today) return setError('Booking date cannot be in the past.');
+      if (formData.startTime >= formData.endTime) return setError('Start time must be earlier than end time.');
     } else if (type === 'register-event') {
       if (!formData.name?.trim()) {
         setError('Please enter student name for event registration.');
@@ -129,6 +132,7 @@ export function ActionModal({ isOpen, type, targetItem, onClose, onConfirm }) {
                     className="form-input"
                     value={formData.date || ''}
                     onChange={handleChange}
+                    min={today}
                     required
                   />
                 </div>
@@ -142,6 +146,7 @@ export function ActionModal({ isOpen, type, targetItem, onClose, onConfirm }) {
                       className="form-input"
                       value={formData.startTime || ''}
                       onChange={handleChange}
+                      min={formData.date === today ? currentTime : undefined}
                       required
                     />
                   </div>

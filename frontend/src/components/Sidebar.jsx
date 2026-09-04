@@ -116,7 +116,7 @@ export function Sidebar({ currentTab, onSelectTab, isMobileOpen, onCloseMobile, 
           />
           <span style={{ color: isBackendOnline ? 'var(--accent-cyan)' : undefined }}>
             {isBackendOnline === true
-              ? 'Registry Connected (4000)'
+              ? 'Registry Connected'
               : isBackendOnline === false
               ? 'Backend Disconnected'
               : 'Connecting...'}

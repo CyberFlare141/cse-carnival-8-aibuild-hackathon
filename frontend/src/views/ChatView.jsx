@@ -7,8 +7,8 @@ import { useData } from '../context/DataContext';
  */
 function formatToolCallSummary(call) {
   if (!call) return 'Executed unknown tool action';
-  const name = call.name || 'tool_action';
-  const args = call.args || {};
+  const name = call.name || call.tool || 'tool_action';
+  const args = call.args || call.arguments || {};
 
   // Room booking
   if (name.includes('book') && !name.includes('cancel')) {
@@ -165,18 +165,17 @@ export function ChatView() {
       }
     } catch (err) {
       console.error('[CampusOS Chat] Error:', err);
-      setErrorBanner(
-        err.message ||
-          'Failed to reach CampusOS agent. Verify that POST /agent/chat is available on the backend.'
-      );
+      const errorMessage = err.isNetworkError
+        ? 'Could not reach CampusOS backend.'
+        : err.message || 'CampusOS Agent request failed.';
+      setErrorBanner(errorMessage);
       // Append a helpful error message in the chat
       setMessages((prev) => [
         ...prev,
         {
           id: 'err-' + Date.now(),
           role: 'agent',
-          content:
-            "I could not reach the agent service on the backend (POST /agent/chat). Please ensure your Express server is running on port 4000.",
+          content: errorMessage,
           toolCalls: [],
           isError: true,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -215,7 +214,7 @@ export function ChatView() {
               color: 'var(--accent-purple)',
             }}
           >
-            POST /agent/chat
+            POST /api/chat
           </span>
         </div>
 

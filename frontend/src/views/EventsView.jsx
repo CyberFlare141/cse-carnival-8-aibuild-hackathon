@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../context/DataContext';
-import { LoadingState, EmptyState } from '../components/StateMessages';
+import { LoadingState, EmptyState, ErrorState } from '../components/StateMessages';
 
 export function EventsView({ onEditItem, onDeleteItem, onAddNew, onOpenRegisterModal }) {
-  const { events, loading, cancelRegistration } = useData();
+  const { events, loading, errors, fetchSection, cancelRegistration } = useData();
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedEventId, setExpandedEventId] = useState(null);
 
@@ -32,6 +32,9 @@ export function EventsView({ onEditItem, onDeleteItem, onAddNew, onOpenRegisterM
 
   if (loading.events && events.length === 0) {
     return <LoadingState message="Checking campus activities, guest lectures, hackathons, and attendee registers..." />;
+  }
+  if (errors.events && events.length === 0) {
+    return <ErrorState message={errors.events} onRetry={() => fetchSection('events')} />;
   }
 
   return (

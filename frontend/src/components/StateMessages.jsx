@@ -42,3 +42,18 @@ export function EmptyState({ title, description, actionText, onAction }) {
     </div>
   );
 }
+
+export function ErrorState({ message, onRetry }) {
+  return (
+    <div className="state-container record-animated" role="alert">
+      <div className="state-emblem" aria-hidden="true">⚠</div>
+      <div className="state-title">UNABLE TO LOAD REGISTRY DATA</div>
+      <p className="state-description">{message || 'The CampusOS backend did not return this data.'}</p>
+      {onRetry && (
+        <button type="button" className="btn btn-primary btn-sm" onClick={onRetry} style={{ marginTop: '12px' }}>
+          Retry
+        </button>
+      )}
+    </div>
+  );
+}
