@@ -99,4 +99,33 @@ Submit your fork's public URL via the instructions in [`SUBMISSION.md`](./SUBMIS
 
 ---
 
+## CampusOS Frontend
+
+The frontend is a React + Vite single-page application located in the [`frontend/`](./frontend) directory.
+
+### Running the Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The app will be live at `http://localhost:5173`.
+
+### Pointing to a Different Backend URL via `.env`
+
+By default, the frontend talks to `http://localhost:4000/api`. To change this:
+
+1. Create or edit `frontend/.env`:
+   ```env
+   VITE_API_URL=http://localhost:4000/api
+   ```
+2. Replace `http://localhost:4000/api` with your target backend URL.
+3. Restart the dev server (`npm run dev`).
+
+For complete frontend documentation and design specs, see [`frontend/README.md`](./frontend/README.md).
+
+---
+
 Good luck. Build something that actually works.
