@@ -104,11 +104,25 @@ def book_room(
             detail="start_time must be earlier than end_time."
         )
 
+    # Serialize requests for the same room.  SQL Server retains this update
+    # lock until the session commits, preventing two API requests from both
+    # passing the availability check before either inserts its booking.
+    db.execute(
+        text("SELECT id FROM dbo.Rooms WITH (UPDLOCK, HOLDLOCK) "
+             "WHERE id = :room_identifier OR room_number = :room_identifier"),
+        {"room_identifier": room_identifier}
+    )
+
     is_avail, conflict_reason, room = check_room_availability(
         db, room_identifier, target_date, start_time, end_time
     )
 
     if not is_avail:
+        if room is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=conflict_reason
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=conflict_reason
@@ -248,6 +262,12 @@ def register_for_event(
     """
     Registers a student for an event, enforcing capacity and checking duplicate registrations.
     """
+    # Lock the event row for the whole check-and-insert operation so capacity
+    # cannot be oversubscribed by concurrent registrations.
+    db.execute(
+        text("SELECT id FROM dbo.Events WITH (UPDLOCK, HOLDLOCK) WHERE id = :event_id"),
+        {"event_id": event_id}
+    )
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(
@@ -312,23 +332,37 @@ def register_for_event(
 def cancel_event_registration(
     db: Session,
     event_id: str,
-    student_id: str
+    student_id: Optional[str] = None,
+    name: Optional[str] = None
 ) -> dict:
     """
-    Cancels a student's event registration and adjusts the registered count.
+    Cancels a student's event registration by student_id or name and adjusts the registered count.
     """
-    reg = db.query(EventRegistration).filter(
+    query = db.query(EventRegistration).filter(
         EventRegistration.event_id == event_id,
-        EventRegistration.student_id == student_id,
         EventRegistration.status == "confirmed"
-    ).first()
+    )
 
-    if not reg:
+    if student_id:
+        query = query.filter(EventRegistration.student_id == student_id)
+    elif name:
+        query = query.filter(EventRegistration.name.ilike(name.strip()))
+    else:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No active registration found for student '{student_id}' in event '{event_id}'."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="student_id or name is required to cancel registration."
         )
 
+    reg = query.first()
+
+    if not reg:
+        target = student_id or name
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No active registration found for '{target}' in event '{event_id}'."
+        )
+
+    st_id = reg.student_id
     event = db.query(Event).filter(Event.id == event_id).first()
 
     db.delete(reg)
@@ -342,11 +376,12 @@ def cancel_event_registration(
     db.commit()
 
     return {
-        "message": f"Registration for student '{student_id}' in event '{event_id}' successfully cancelled.",
+        "message": f"Registration for '{st_id}' in event '{event_id}' successfully cancelled.",
         "event_id": event_id,
-        "student_id": student_id,
+        "student_id": st_id,
         "registered_count": event.registered if event else 0
     }
+
 
 # ---------------------------------------------------------------------------
 # Query Helpers for AI Tools

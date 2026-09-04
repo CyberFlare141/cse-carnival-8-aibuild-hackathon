@@ -31,12 +31,18 @@ app.add_middleware(
 )
 
 # Include Routers under /api
-app.include_router(schedules.router, prefix=settings.API_PREFIX)
+app.include_router(schedules.router, prefix=f"{settings.API_PREFIX}/schedules")
+app.include_router(schedules.router, prefix=f"{settings.API_PREFIX}/schedule")
+# These routers already own their resource prefix (for example ``/rooms``).
+# Add only the common API prefix here so their public paths remain
+# ``/api/rooms``, ``/api/events``, etc.  Adding both prefixes produced paths
+# such as ``/api/rooms/rooms`` that did not match the frontend contract.
 app.include_router(rooms.router, prefix=settings.API_PREFIX)
 app.include_router(events.router, prefix=settings.API_PREFIX)
 app.include_router(announcements.router, prefix=settings.API_PREFIX)
 app.include_router(assignments.router, prefix=settings.API_PREFIX)
 app.include_router(chat.router, prefix=settings.API_PREFIX)
+
 
 @app.get("/api/health", tags=["Health"])
 def health_check():

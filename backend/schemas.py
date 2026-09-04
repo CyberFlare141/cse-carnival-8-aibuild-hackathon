@@ -87,12 +87,17 @@ class BookingResponse(BaseModel):
         from_attributes = True
 
 class RoomBase(BaseModel):
-    room_number: str
-    type: str
-    capacity: int
+    room_number: Optional[str] = None
+    roomNumber: Optional[str] = None
+    type: str = "classroom"
+    capacity: int = 40
     equipment: list[str] = []
-    floor: int
+    floor: int = 7
     status: str = "available"
+
+    @field_validator("room_number", mode="before")
+    def validate_room_number(cls, v, info):
+        return v
 
     @field_validator("equipment", mode="before")
     def validate_equipment(cls, v):
@@ -103,11 +108,15 @@ class RoomBase(BaseModel):
                 return [s.strip() for s in v.split(",") if s.strip()]
         return v or []
 
+    def get_room_number(self) -> str:
+        return self.room_number or self.roomNumber or ""
+
 class RoomCreate(RoomBase):
     id: Optional[str] = None
 
 class RoomUpdate(BaseModel):
     room_number: Optional[str] = None
+    roomNumber: Optional[str] = None
     type: Optional[str] = None
     capacity: Optional[int] = None
     equipment: Optional[list[str]] = None
@@ -123,27 +132,57 @@ class RoomUpdate(BaseModel):
                 return [s.strip() for s in v.split(",") if s.strip()]
         return v
 
-class RoomResponse(RoomBase):
+    def get_room_number(self) -> Optional[str]:
+        return self.room_number or self.roomNumber
+
+class RoomResponse(BaseModel):
     id: str
+    room_number: str
+    type: str
+    capacity: int
+    equipment: list[str] = []
+    floor: int
+    status: str = "available"
     bookings: list[BookingResponse] = []
+
+    @field_validator("equipment", mode="before")
+    def validate_equipment(cls, v):
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                return [s.strip() for s in v.split(",") if s.strip()]
+        return v or []
 
     class Config:
         from_attributes = True
 
 class RoomBookingCreate(BaseModel):
-    room_identifier: str = Field(..., description="Room ID (e.g. room-002) or Room Number (e.g. 7A02)")
-    booked_by: str
-    date: str = Field(..., description="Date in YYYY-MM-DD format")
-    start_time: str = Field(..., description="24h time in HH:MM format")
-    end_time: str = Field(..., description="24h time in HH:MM format")
-    purpose: str
+    room_identifier: Optional[str] = None
+    booked_by: Optional[str] = None
+    bookedBy: Optional[str] = None
+    date: str
+    start_time: Optional[str] = None
+    startTime: Optional[str] = None
+    end_time: Optional[str] = None
+    endTime: Optional[str] = None
+    purpose: Optional[str] = "Academic session"
 
-    @field_validator("start_time", "end_time", mode="before")
-    def validate_time(cls, v):
-        return format_time(v)
+    def get_booked_by(self) -> str:
+        return self.booked_by or self.bookedBy or "Student"
+
+    def get_start_time(self) -> str:
+        return format_time(self.start_time or self.startTime)
+
+    def get_end_time(self) -> str:
+        return format_time(self.end_time or self.endTime)
 
 class RoomBookingCancel(BaseModel):
-    booking_id: str
+    booking_id: Optional[str] = None
+    bookingId: Optional[str] = None
+
+    def get_booking_id(self) -> str:
+        return self.booking_id or self.bookingId or ""
 
 # ---------------------------------------------------------------------------
 # 3. Events & Event Registrations
@@ -157,32 +196,44 @@ class RegistrationResponse(BaseModel):
 
 class EventBase(BaseModel):
     name: str
-    description: str
+    description: Optional[str] = ""
     date: str
-    start_time: str
-    end_time: str
-    end_date: str
-    venue: str
-    organizer: str
-    capacity: int
+    start_time: Optional[str] = "10:00"
+    end_time: Optional[str] = "12:00"
+    end_date: Optional[str] = None
+    venue: str = "7A01"
+    organizer: Optional[str] = "AUST"
+    capacity: int = 40
     status: str = "upcoming"
 
-    @field_validator("date", "end_date", mode="before")
+    @field_validator("date", mode="before")
     def validate_date(cls, v):
         return format_date(v)
 
+    @field_validator("end_date", mode="before")
+    def validate_end_date(cls, v, info):
+        if v is None and "date" in info.data:
+            return format_date(info.data["date"])
+        return format_date(v) if v is not None else v
+
     @field_validator("start_time", "end_time", mode="before")
     def validate_time(cls, v):
-        return format_time(v)
+        if v is not None:
+            return format_time(v)
+        return v
 
 class EventCreate(EventBase):
     id: Optional[str] = None
     registered: Optional[int] = 0
+    time: Optional[str] = None
 
 class EventUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     date: Optional[str] = None
+    # The dashboard edits events with a combined "HH:MM - HH:MM" value.
+    # Keep accepting the canonical start/end fields too.
+    time: Optional[str] = None
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     end_date: Optional[str] = None
@@ -213,13 +264,21 @@ class EventResponse(EventBase):
         from_attributes = True
 
 class EventRegistrationCreate(BaseModel):
-    event_id: str
-    student_id: str
+    event_id: Optional[str] = None
+    student_id: Optional[str] = None
     name: str
 
+    def get_student_id(self) -> str:
+        if self.student_id:
+            return self.student_id
+        # Fallback generated ID from name
+        return f"std-{abs(hash(self.name)) % 100000:05d}"
+
 class EventRegistrationCancel(BaseModel):
-    event_id: str
-    student_id: str
+    event_id: Optional[str] = None
+    student_id: Optional[str] = None
+    name: Optional[str] = None
+
 
 # ---------------------------------------------------------------------------
 # 4. Announcements
@@ -279,6 +338,13 @@ class AssignmentBase(BaseModel):
 
 class AssignmentCreate(AssignmentBase):
     id: Optional[str] = None
+    assigned_date: Optional[str] = None
+
+    @field_validator("assigned_date", mode="before")
+    def validate_assigned_date(cls, v):
+        if not v:
+            return date.today().isoformat()
+        return format_date(v)
 
 class AssignmentUpdate(BaseModel):
     course: Optional[str] = None
@@ -308,17 +374,36 @@ class AssignmentResponse(AssignmentBase):
 # ---------------------------------------------------------------------------
 class ChatMessage(BaseModel):
     role: str # "user" or "assistant" or "system"
-    content: str
+    content: Optional[str] = ""
+    text: Optional[str] = None
+
+    def get_content(self) -> str:
+        return self.content or self.text or ""
 
 class ChatRequest(BaseModel):
     message: str
     conversation_history: list[ChatMessage] = []
+    history: Optional[list[ChatMessage]] = None
+
+    def get_history(self) -> list[ChatMessage]:
+        return self.conversation_history or self.history or []
 
 class ToolCallLog(BaseModel):
     tool: str
-    arguments: dict[str, Any]
-    result: Any
+    name: Optional[str] = None
+    arguments: dict[str, Any] = {}
+    args: Optional[dict[str, Any]] = None
+    result: Any = None
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not self.name and self.tool:
+            self.name = self.tool
+        if not self.args and self.arguments:
+            self.args = self.arguments
 
 class ChatResponse(BaseModel):
     reply: str
     tools_called: list[ToolCallLog] = []
+    toolCalls: list[ToolCallLog] = []
+    tool_calls: list[ToolCallLog] = []
