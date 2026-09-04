@@ -202,7 +202,7 @@ export function RoomsView({ onEditItem, onDeleteItem, onAddNew, onOpenBookModal 
                           <div key={b.id || b.booking_id} className="booking-item-row">
                             <div>
                               <div style={{ fontWeight: 800, color: '#ffffff', fontSize: '15px' }}>
-                                {b.bookedBy || b.booked_by}
+                                {b.sourceType === 'campus_event' ? b.title : b.bookedBy || b.booked_by}
                                 {b.purpose && (
                                   <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: '8px' }}>
                                     — {b.purpose}
@@ -212,15 +212,20 @@ export function RoomsView({ onEditItem, onDeleteItem, onAddNew, onOpenBookModal 
                               <div style={{ fontSize: '13px', color: 'var(--accent-cyan)', marginTop: '3px', fontWeight: 600 }}>
                                 📅 {b.date} &nbsp;·&nbsp; ⏰ {b.startTime || b.start_time} – {b.endTime || b.end_time}
                               </div>
+                              <div style={{ fontSize: '11px', color: 'var(--accent-yellow)', marginTop: '4px', fontWeight: 800, textTransform: 'uppercase' }}>
+                                {b.sourceType === 'campus_event' ? 'Campus Event' : 'Room Booking'}
+                              </div>
                             </div>
-                            <button
-                              type="button"
-                              className="btn btn-danger btn-sm"
-                              onClick={() => handleCancelBooking(room.id, b.id || b.booking_id, b.bookedBy || b.booked_by)}
-                              title="Cancel this booking"
-                            >
-                              Cancel Booking
-                            </button>
+                            {b.sourceType === 'room_booking' && (
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-sm"
+                                onClick={() => handleCancelBooking(room.id, b.id || b.booking_id, b.bookedBy || b.booked_by)}
+                                title="Cancel this booking"
+                              >
+                                Cancel Booking
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>

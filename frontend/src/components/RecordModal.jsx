@@ -4,6 +4,8 @@ export function RecordModal({ isOpen, mode = 'add', section, initialData = null,
   const [formData, setFormData] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [validationError, setValidationError] = useState('');
+  const today = new Date().toLocaleDateString('en-CA');
+  const currentTime = new Date().toTimeString().slice(0, 5);
 
   useEffect(() => {
     if (!isOpen) {
@@ -110,12 +112,23 @@ export function RecordModal({ isOpen, mode = 'add', section, initialData = null,
       setValidationError('Please provide an event name and date.');
       return;
     }
+    if (section === 'events') {
+      if (formData.date < today) return setValidationError('Event date cannot be in the past.');
+      const [start, end] = (formData.time || '').split('-').map((value) => value.trim());
+      if (!start || !end || start >= end) return setValidationError('Start time must be earlier than end time.');
+      if (formData.date === today && start < currentTime) return setValidationError('Event start time cannot be in the past.');
+      if (Number(formData.capacity) <= 0) return setValidationError('Capacity must be greater than zero.');
+    }
     if (section === 'announcements' && (!formData.title || !formData.body)) {
       setValidationError('Please provide both announcement headline and body text.');
       return;
     }
     if (section === 'assignments' && (!formData.course || !formData.title || !formData.deadline)) {
       setValidationError('Please provide course code, assignment title, and deadline.');
+      return;
+    }
+    if (section === 'assignments' && formData.deadline < today) {
+      setValidationError('Deadline cannot be before today.');
       return;
     }
 
@@ -398,6 +411,7 @@ export function RecordModal({ isOpen, mode = 'add', section, initialData = null,
                       className="form-input"
                       value={formData.date || ''}
                       onChange={handleChange}
+                      min={today}
                       required
                     />
                   </div>

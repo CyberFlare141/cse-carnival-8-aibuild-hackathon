@@ -18,7 +18,7 @@ def generate_content_with_retry(client: genai.Client, contents: list, config: ty
     for attempt in range(3):
         try:
             return client.models.generate_content(
-                model="gemini-3.6-flash",
+                model=settings.GEMINI_MODEL,
                 contents=contents,
                 config=config
             )
@@ -281,32 +281,32 @@ def process_chat(
     api_key = settings.GEMINI_API_KEY
     if not api_key:
         return {
-            "reply": "⚠️ Gemini API key is not configured in `.env`. Please add `GEMINI_API_KEY=your_key_here` to enable live AI agent interactions.",
-            "tools_called": []
+            "reply": "Gemini API key is not configured on the backend.",
+            "tools_called": [],
+            "error": True,
+            "error_type": "configuration",
         }
 
-    client = genai.Client(api_key=api_key)
     tools_called = []
 
-    # Format contents history
-    contents = []
-    for msg in conversation_history:
-        role = "user" if msg.get("role") == "user" else "model"
-        contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg.get("content", ""))]))
-
-    # Append current user message
-    contents.append(types.Content(role="user", parts=[types.Part.from_text(text=message)]))
-
-    config = types.GenerateContentConfig(
-        tools=GEMINI_TOOLS,
-        system_instruction=(
-            f"{SYSTEM_INSTRUCTION}\n\n"
-            f"Current server date and time: {datetime.now().strftime('%A, %Y-%m-%d %H:%M')}."
-        ),
-        temperature=0.2
-    )
-
     try:
+        client = genai.Client(api_key=api_key)
+        contents = []
+        for msg in conversation_history:
+            role = "user" if msg.get("role") == "user" else "model"
+            contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg.get("content", ""))]))
+
+        contents.append(types.Content(role="user", parts=[types.Part.from_text(text=message)]))
+
+        config = types.GenerateContentConfig(
+            tools=GEMINI_TOOLS,
+            system_instruction=(
+                f"{SYSTEM_INSTRUCTION}\n\n"
+                f"Current server date and time: {datetime.now().strftime('%A, %Y-%m-%d %H:%M')}."
+            ),
+            temperature=0.2
+        )
+
         # Step 1: Call model with tool definitions
         response = generate_content_with_retry(client, contents, config)
 
@@ -328,6 +328,15 @@ def process_chat(
                     "result": tool_output
                 })
 
+                if isinstance(tool_output, dict) and tool_output.get("error"):
+                    logger.error("Agent tool %s failed: %s", fn_name, tool_output["error"])
+                    return {
+                        "reply": "CampusOS Agent encountered an error while executing a campus action.",
+                        "tools_called": tools_called,
+                        "error": True,
+                        "error_type": "tool_execution",
+                    }
+
                 # Create function response part
                 tool_response_parts.append(
                     types.Part.from_function_response(
@@ -347,9 +356,23 @@ def process_chat(
         }
 
     except Exception as e:
-        logger.error(f"Error in Gemini agent interaction: {e}")
+        logger.exception("Gemini request failed")
+        message = str(e).upper()
+        if "429" in message or "RESOURCE_EXHAUSTED" in message or "QUOTA" in message:
+            error_type = "quota"
+            reply = "Gemini API rate limit or quota exceeded. Try again later."
+        elif "401" in message or "403" in message or "UNAUTHENTICATED" in message or "PERMISSION_DENIED" in message:
+            error_type = "authentication"
+            reply = "Gemini authentication failed. Check the backend API key."
+        elif "400" in message or "INVALID_ARGUMENT" in message:
+            error_type = "request"
+            reply = "The AI request was invalid."
+        else:
+            error_type = "provider"
+            reply = "Gemini service is temporarily unavailable."
         return {
-            "reply": "The AI service is temporarily unavailable. Please try again shortly.",
+            "reply": reply,
             "tools_called": tools_called,
-            "error": True
+            "error": True,
+            "error_type": error_type,
         }

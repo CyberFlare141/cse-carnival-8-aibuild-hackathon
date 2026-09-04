@@ -115,11 +115,11 @@ The app will be live at `http://localhost:5173`.
 
 ### Pointing to a Different Backend URL via `.env`
 
-By default, the frontend talks to `http://localhost:4000/api`. To change this:
+By default, the frontend talks to `http://localhost:8000/api`. To change this:
 
 1. Create or edit `frontend/.env`:
    ```env
-   VITE_API_URL=http://localhost:4000/api
+    VITE_API_URL=http://localhost:8000/api
    ```
 2. Replace `http://localhost:4000/api` with your target backend URL.
 3. Restart the dev server (`npm run dev`).

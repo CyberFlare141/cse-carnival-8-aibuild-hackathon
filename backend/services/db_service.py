@@ -30,6 +30,64 @@ def format_time_str(t: time) -> str:
 def format_date_str(d: date) -> str:
     return d.strftime("%Y-%m-%d")
 
+
+def ensure_start_is_current_or_future(target_date: date, start_time: time, message: str) -> None:
+    """Reject a start datetime before the machine's local campus time."""
+    if datetime.combine(target_date, start_time) < datetime.now():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
+
+def room_matches_venue(room: Room, venue: str) -> bool:
+    """Use the same room number/ID matching rule for conflicts and ledgers."""
+    return venue in (room.id, room.room_number)
+
+
+def get_room_occupancies(db: Session, room: Room) -> list[dict]:
+    """Return active/future room bookings and active campus-event occupancies."""
+    occupancies = [
+        {
+            "booking_id": booking.booking_id,
+            "booked_by": booking.booked_by,
+            "date": booking.date,
+            "start_time": booking.start_time,
+            "end_time": booking.end_time,
+            "purpose": booking.purpose,
+            "status": booking.status,
+            "source_type": "room_booking",
+            "title": booking.purpose,
+            "event_id": None,
+        }
+        for booking in db.query(RoomBooking).filter(
+            RoomBooking.room_id == room.id,
+            RoomBooking.status == "confirmed",
+        ).all()
+    ]
+    now = datetime.now()
+    active_events = db.query(Event).filter(
+        or_(
+            Event.date > now.date(),
+            and_(Event.date == now.date(), Event.end_time > now.time()),
+        ),
+        Event.status.in_(["upcoming", "ongoing", "full"]),
+    ).all()
+    occupancies.extend(
+        {
+            "booking_id": f"event-{event.id}",
+            "booked_by": event.organizer,
+            "date": event.date,
+            "start_time": event.start_time,
+            "end_time": event.end_time,
+            "purpose": "Campus Event",
+            "status": "confirmed",
+            "source_type": "campus_event",
+            "title": event.name,
+            "event_id": event.id,
+        }
+        for event in active_events
+        if room_matches_venue(room, event.venue)
+    )
+    return sorted(occupancies, key=lambda item: (item["date"], item["start_time"]))
+
 # ---------------------------------------------------------------------------
 # Room Operations
 # ---------------------------------------------------------------------------
@@ -40,48 +98,77 @@ def check_room_availability(
     start_time: time,
     end_time: time
 ) -> tuple[bool, Optional[str], Optional[Room]]:
-    """
-    Checks if a room is available for the given date and time window.
-    Checks against both confirmed RoomBookings and regular class Schedules.
-    """
-    # 1. Resolve room
+    """Check a registered room against all occupancy sources."""
+    return check_venue_availability(
+        db, room_identifier, target_date, start_time, end_time
+    )
+
+
+def check_venue_availability(
+    db: Session,
+    venue: str,
+    target_date: date,
+    start_time: time,
+    end_time: time,
+    exclude_event_id: Optional[str] = None,
+) -> tuple[bool, Optional[str], Optional[Room]]:
+    """Check classes, confirmed bookings, and active events for a venue."""
     room = db.query(Room).filter(
-        or_(Room.id == room_identifier, Room.room_number == room_identifier)
+        or_(Room.id == venue, Room.room_number == venue)
     ).first()
 
     if not room:
-        return False, f"Room '{room_identifier}' not found.", None
+        room_number = venue
+    else:
+        room_number = room.room_number
 
-    if room.status != "available":
+    if room and room.status != "available":
         return False, f"Room {room.room_number} is marked as '{room.status}'.", room
 
-    # 2. Check overlapping confirmed bookings on target_date
-    overlapping_booking = db.query(RoomBooking).filter(
-        RoomBooking.room_id == room.id,
-        RoomBooking.date == target_date,
-        RoomBooking.status == "confirmed",
-        RoomBooking.start_time < end_time,
-        RoomBooking.end_time > start_time
-    ).first()
+    if room:
+        overlapping_booking = db.query(RoomBooking).filter(
+            RoomBooking.room_id == room.id,
+            RoomBooking.date == target_date,
+            RoomBooking.status == "confirmed",
+            RoomBooking.start_time < end_time,
+            RoomBooking.end_time > start_time
+        ).first()
+        if overlapping_booking:
+            b_start = format_time_str(overlapping_booking.start_time)
+            b_end = format_time_str(overlapping_booking.end_time)
+            return False, f"Room {room.room_number} is already booked by {overlapping_booking.booked_by} ({overlapping_booking.purpose}) from {b_start} to {b_end}.", room
 
-    if overlapping_booking:
-        b_start = format_time_str(overlapping_booking.start_time)
-        b_end = format_time_str(overlapping_booking.end_time)
-        return False, f"Room {room.room_number} is already booked by {overlapping_booking.booked_by} ({overlapping_booking.purpose}) from {b_start} to {b_end}.", room
+        day_of_week = target_date.strftime("%A")
+        overlapping_schedule = db.query(Schedule).filter(
+            Schedule.room == room_number,
+            Schedule.day == day_of_week,
+            Schedule.start_time < end_time,
+            Schedule.end_time > start_time
+        ).first()
+        if overlapping_schedule:
+            s_start = format_time_str(overlapping_schedule.start_time)
+            s_end = format_time_str(overlapping_schedule.end_time)
+            return False, f"Room {room.room_number} has a scheduled class: {overlapping_schedule.course} ({overlapping_schedule.title}) from {s_start} to {s_end} on {day_of_week}.", room
 
-    # 3. Check class schedules for the day of week
-    day_of_week = target_date.strftime("%A") # e.g. Sunday, Monday...
-    overlapping_schedule = db.query(Schedule).filter(
-        Schedule.room == room.room_number,
-        Schedule.day == day_of_week,
-        Schedule.start_time < end_time,
-        Schedule.end_time > start_time
-    ).first()
-
-    if overlapping_schedule:
-        s_start = format_time_str(overlapping_schedule.start_time)
-        s_end = format_time_str(overlapping_schedule.end_time)
-        return False, f"Room {room.room_number} has a scheduled class: {overlapping_schedule.course} ({overlapping_schedule.title}) from {s_start} to {s_end} on {day_of_week}.", room
+    now = datetime.now()
+    event_query = db.query(Event).filter(
+        Event.venue.in_([room.id, room.room_number]) if room else Event.venue == room_number,
+        or_(
+            Event.date > now.date(),
+            and_(Event.date == now.date(), Event.end_time > now.time()),
+        ),
+        Event.date == target_date,
+        Event.status.in_(["upcoming", "ongoing", "full"]),
+        Event.start_time < end_time,
+        Event.end_time > start_time,
+    )
+    if exclude_event_id:
+        event_query = event_query.filter(Event.id != exclude_event_id)
+    overlapping_event = event_query.first()
+    if overlapping_event:
+        e_start = format_time_str(overlapping_event.start_time)
+        e_end = format_time_str(overlapping_event.end_time)
+        return False, f"Venue {room_number} is occupied by event '{overlapping_event.name}' from {e_start} to {e_end}.", room
 
     return True, None, room
 
@@ -103,6 +190,14 @@ def book_room(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="start_time must be earlier than end_time."
         )
+    if target_date < date.today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Room bookings cannot be created for a past date."
+        )
+    ensure_start_is_current_or_future(
+        target_date, start_time, "The selected booking time has already passed."
+    )
 
     # Serialize requests for the same room.  SQL Server retains this update
     # lock until the session commits, preventing two API requests from both
@@ -218,23 +313,10 @@ def find_available_rooms(
                     continue
 
         if checking_availability:
-            conflict_booking = db.query(RoomBooking).filter(
-                RoomBooking.room_id == room.id,
-                RoomBooking.date == target_date,
-                RoomBooking.status == "confirmed",
-                RoomBooking.start_time < end_time,
-                RoomBooking.end_time > start_time
-            ).first()
-            if conflict_booking:
-                continue
-
-            conflict_schedule = db.query(Schedule).filter(
-                Schedule.room == room.room_number,
-                Schedule.day == day_of_week,
-                Schedule.start_time < end_time,
-                Schedule.end_time > start_time
-            ).first()
-            if conflict_schedule:
+            available, _, _ = check_venue_availability(
+                db, room.room_number, target_date, start_time, end_time
+            )
+            if not available:
                 continue
 
         try:
@@ -285,6 +367,13 @@ def register_for_event(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Event '{event.name}' is {event.status} and cannot accept registrations."
+        )
+
+    event_end = datetime.combine(event.date, event.end_time)
+    if event.date < date.today() or event_end <= datetime.now():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This event has already ended and cannot accept registrations."
         )
 
     # Check existing registration

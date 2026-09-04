@@ -103,6 +103,14 @@ def update_assignment(
     if "status" in data and data["status"] is not None:
         data["status"] = data["status"].lower()
 
+    assigned_date = data.get("assigned_date", asgn.assigned_date)
+    deadline = data.get("deadline", asgn.deadline)
+    if deadline < assigned_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="deadline must be on or after assigned_date."
+        )
+
     for field, val in data.items():
         setattr(asgn, field, val)
 
