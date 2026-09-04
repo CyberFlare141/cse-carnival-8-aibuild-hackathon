@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../context/DataContext';
-import { LoadingState, EmptyState } from '../components/StateMessages';
+import { LoadingState, EmptyState, ErrorState } from '../components/StateMessages';
 
 export function AnnouncementsView({ onEditItem, onDeleteItem, onAddNew }) {
-  const { announcements, loading } = useData();
+  const { announcements, loading, errors, fetchSection } = useData();
   const [selectedPriority, setSelectedPriority] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -25,6 +25,9 @@ export function AnnouncementsView({ onEditItem, onDeleteItem, onAddNew }) {
 
   if (loading.announcements && announcements.length === 0) {
     return <LoadingState message="Fetching official campus bulletins, academic circulars, and notices..." />;
+  }
+  if (errors.announcements && announcements.length === 0) {
+    return <ErrorState message={errors.announcements} onRetry={() => fetchSection('announcements')} />;
   }
 
   return (

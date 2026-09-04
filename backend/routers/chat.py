@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
@@ -20,6 +20,11 @@ def chat_with_agent(payload: ChatRequest, db: Session = Depends(get_db)):
         conversation_history=history_dicts,
         db=db
     )
+    if result.get("error"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=result["reply"]
+        )
     tools = result.get("tools_called", [])
     return {
         "reply": result.get("reply", ""),
@@ -27,4 +32,3 @@ def chat_with_agent(payload: ChatRequest, db: Session = Depends(get_db)):
         "toolCalls": tools,
         "tool_calls": tools
     }
-
