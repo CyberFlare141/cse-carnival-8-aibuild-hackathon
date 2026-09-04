@@ -94,6 +94,7 @@ export function ActionModal({ isOpen, type, targetItem, onClose, onConfirm }) {
           <div className="modal-body">
             {error && (
               <div
+                className="modal-error-message"
                 style={{
                   padding: '10px 14px',
                   backgroundColor: 'rgba(255, 107, 53, 0.15)',

@@ -4,6 +4,7 @@ export function RecordModal({ isOpen, mode = 'add', section, initialData = null,
   const [formData, setFormData] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [validationError, setValidationError] = useState('');
+  const [shakeKey, setShakeKey] = useState(0);
   const today = new Date().toLocaleDateString('en-CA');
   const currentTime = new Date().toTimeString().slice(0, 5);
 
@@ -102,14 +103,17 @@ export function RecordModal({ isOpen, mode = 'add', section, initialData = null,
     // Quick basic validation
     if (section === 'schedule' && (!formData.course || !formData.day || !formData.room)) {
       setValidationError('Please specify course code, day, and room.');
+      setShakeKey((k) => k + 1);
       return;
     }
     if (section === 'rooms' && !formData.roomNumber) {
       setValidationError('Please provide a room number (e.g. 7A01).');
+      setShakeKey((k) => k + 1);
       return;
     }
     if (section === 'events' && (!formData.name || !formData.date)) {
       setValidationError('Please provide an event name and date.');
+      setShakeKey((k) => k + 1);
       return;
     }
     if (section === 'events') {
@@ -121,10 +125,12 @@ export function RecordModal({ isOpen, mode = 'add', section, initialData = null,
     }
     if (section === 'announcements' && (!formData.title || !formData.body)) {
       setValidationError('Please provide both announcement headline and body text.');
+      setShakeKey((k) => k + 1);
       return;
     }
     if (section === 'assignments' && (!formData.course || !formData.title || !formData.deadline)) {
       setValidationError('Please provide course code, assignment title, and deadline.');
+      setShakeKey((k) => k + 1);
       return;
     }
     if (section === 'assignments' && formData.deadline < today) {
@@ -180,6 +186,8 @@ export function RecordModal({ isOpen, mode = 'add', section, initialData = null,
           <div className="modal-body">
             {validationError && (
               <div
+                key={shakeKey}
+                className="shake"
                 style={{
                   padding: '10px 16px',
                   backgroundColor: 'rgba(255, 107, 53, 0.15)',

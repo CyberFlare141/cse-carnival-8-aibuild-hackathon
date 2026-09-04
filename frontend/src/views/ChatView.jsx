@@ -306,13 +306,17 @@ export function ChatView() {
               <div
                 className="message-bubble"
                 style={{
-                  fontStyle: 'italic',
-                  color: 'var(--text-muted)',
                   borderStyle: 'dashed',
-                  animation: 'pulseDot 1.5s infinite',
+                  padding: '4px 8px',
+                  display: 'inline-block',
+                  minWidth: 'unset',
                 }}
               >
-                ✨ Analyzing campus data and executing tools...
+                <span className="typing-indicator">
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                </span>
               </div>
             </div>
           )}

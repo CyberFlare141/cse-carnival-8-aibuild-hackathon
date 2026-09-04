@@ -92,7 +92,20 @@ export function RoomsView({ onEditItem, onDeleteItem, onAddNew, onOpenBookModal 
 
             return (
               <div key={room.id} className={`room-card ${accentClass} record-animated`}>
-                <div className="room-summary-bar" onClick={() => toggleExpand(room.id)}>
+                <div
+                  className="room-summary-bar"
+                  onClick={() => toggleExpand(room.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      toggleExpand(room.id);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  aria-expanded={isExpanded}
+                  aria-controls={`room-bookings-${room.id}`}
+                >
                   <div className="room-id-group">
                     <span className="room-number-tag">{room.roomNumber}</span>
                     <div>
@@ -126,6 +139,7 @@ export function RoomsView({ onEditItem, onDeleteItem, onAddNew, onOpenBookModal 
                   </div>
 
                   <div
+                    className="room-action-row"
                     style={{ display: 'flex', alignItems: 'center', gap: '10px' }}
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -166,7 +180,7 @@ export function RoomsView({ onEditItem, onDeleteItem, onAddNew, onOpenBookModal 
 
                 {/* EXPANDABLE BOOKINGS PANEL */}
                 {isExpanded && (
-                  <div className="room-bookings-panel">
+                  <div id={`room-bookings-${room.id}`} className="room-bookings-panel">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span
                         style={{

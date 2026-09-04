@@ -25,6 +25,9 @@ npm run dev
 
 The application will be running at: **`http://localhost:5173`**.
 
+* **`http://localhost:5173/`** — Public Landing Page (interactive agent preview, 5 campus systems showcase, and workflow explanation).
+* **`http://localhost:5173/app`** — Full CampusOS Dashboard Workspace (Class Timetable, Room Registry, Events Gazette, Notice Board, Assignments Log, and AI Chat).
+
 ---
 
 ## 2. Pointing to a Different Backend URL via `.env`

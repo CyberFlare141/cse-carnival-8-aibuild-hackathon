@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useData } from './context/DataContext';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -7,12 +7,22 @@ import { ActionModal } from './components/ActionModal';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { ToastContainer } from './components/Toast';
 
+import { LandingPage } from './views/LandingPage';
 import { ScheduleView } from './views/ScheduleView';
 import { RoomsView } from './views/RoomsView';
 import { EventsView } from './views/EventsView';
 import { AnnouncementsView } from './views/AnnouncementsView';
 import { AssignmentsView } from './views/AssignmentsView';
 import { ChatView } from './views/ChatView';
+
+function getInitialRoute() {
+  const path = window.location.pathname;
+  const hash = window.location.hash;
+  if (path.startsWith('/app') || path.startsWith('/dashboard') || hash === '#app' || hash === '#dashboard') {
+    return 'app';
+  }
+  return 'landing';
+}
 
 export function AppContent() {
   const {
@@ -25,8 +35,39 @@ export function AppContent() {
     registerEvent,
   } = useData();
 
+  const [currentView, setCurrentView] = useState(getInitialRoute);
   const [currentTab, setCurrentTab] = useState('schedule');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Sync with browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = getInitialRoute();
+      setCurrentView(route);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Navigation handlers
+  const handleOpenApp = useCallback((targetTab) => {
+    if (targetTab && typeof targetTab === 'string') {
+      setCurrentTab(targetTab);
+    }
+    setCurrentView('app');
+    if (window.location.pathname !== '/app') {
+      window.history.pushState(null, '', '/app');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const handleGoToLanding = useCallback(() => {
+    setCurrentView('landing');
+    if (window.location.pathname !== '/') {
+      window.history.pushState(null, '', '/');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
 
   // Modals state
   const [recordModal, setRecordModal] = useState({
@@ -125,6 +166,38 @@ export function AppContent() {
     }
   };
 
+  // If in Public Landing Page mode, render LandingPage
+  if (currentView === 'landing') {
+    return (
+      <div className="landing-shell">
+        <Sidebar
+          currentTab="home"
+          onSelectTab={handleOpenApp}
+          isMobileOpen={isMobileMenuOpen}
+          onCloseMobile={() => setIsMobileMenuOpen(false)}
+          onGoToLanding={handleGoToLanding}
+          showLandingLink={false}
+        />
+        {isMobileMenuOpen && (
+          <button
+            type="button"
+            className="mobile-nav-scrim landing-nav-scrim"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-label="Close navigation menu"
+          />
+        )}
+        <div className="landing-root">
+          <LandingPage
+            onOpenApp={handleOpenApp}
+            onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
+          />
+        </div>
+        <ToastContainer />
+      </div>
+    );
+  }
+
+  // Otherwise, render full Dashboard application workspace
   return (
     <div className="app-container">
       {/* Sidebar Navigation */}
@@ -133,7 +206,17 @@ export function AppContent() {
         onSelectTab={(tab) => setCurrentTab(tab)}
         isMobileOpen={isMobileMenuOpen}
         onCloseMobile={() => setIsMobileMenuOpen(false)}
+        onGoToLanding={handleGoToLanding}
       />
+
+      {isMobileMenuOpen && (
+        <button
+          type="button"
+          className="mobile-nav-scrim"
+          onClick={() => setIsMobileMenuOpen(false)}
+          aria-label="Close navigation menu"
+        />
+      )}
 
       {/* Main Content Area */}
       <main className="main-content">
@@ -162,50 +245,53 @@ export function AppContent() {
           onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
         />
 
-        {/* Active View Component */}
-        {currentTab === 'schedule' && (
-          <ScheduleView
-            onEditItem={(item) => handleOpenEditModal('schedule', item)}
-            onDeleteItem={(item) => handleDeletePrompt('schedule', item)}
-            onAddNew={() => handleOpenAddModal('schedule')}
-          />
-        )}
+        {/* Active View Component — keyed so CSS entrance fires on tab switch */}
+        <div key={currentTab} className="tab-content-enter">
+          {currentTab === 'schedule' && (
+            <ScheduleView
+              onEditItem={(item) => handleOpenEditModal('schedule', item)}
+              onDeleteItem={(item) => handleDeletePrompt('schedule', item)}
+              onAddNew={() => handleOpenAddModal('schedule')}
+            />
+          )}
 
-        {currentTab === 'rooms' && (
-          <RoomsView
-            onEditItem={(item) => handleOpenEditModal('rooms', item)}
-            onDeleteItem={(item) => handleDeletePrompt('rooms', item)}
-            onAddNew={() => handleOpenAddModal('rooms')}
-            onOpenBookModal={handleOpenBookModal}
-          />
-        )}
+          {currentTab === 'rooms' && (
+            <RoomsView
+              onEditItem={(item) => handleOpenEditModal('rooms', item)}
+              onDeleteItem={(item) => handleDeletePrompt('rooms', item)}
+              onAddNew={() => handleOpenAddModal('rooms')}
+              onOpenBookModal={handleOpenBookModal}
+            />
+          )}
 
-        {currentTab === 'events' && (
-          <EventsView
-            onEditItem={(item) => handleOpenEditModal('events', item)}
-            onDeleteItem={(item) => handleDeletePrompt('events', item)}
-            onAddNew={() => handleOpenAddModal('events')}
-            onOpenRegisterModal={handleOpenRegisterModal}
-          />
-        )}
+          {currentTab === 'events' && (
+            <EventsView
+              onEditItem={(item) => handleOpenEditModal('events', item)}
+              onDeleteItem={(item) => handleDeletePrompt('events', item)}
+              onAddNew={() => handleOpenAddModal('events')}
+              onOpenRegisterModal={handleOpenRegisterModal}
+            />
+          )}
 
-        {currentTab === 'announcements' && (
-          <AnnouncementsView
-            onEditItem={(item) => handleOpenEditModal('announcements', item)}
-            onDeleteItem={(item) => handleDeletePrompt('announcements', item)}
-            onAddNew={() => handleOpenAddModal('announcements')}
-          />
-        )}
+          {currentTab === 'announcements' && (
+            <AnnouncementsView
+              onEditItem={(item) => handleOpenEditModal('announcements', item)}
+              onDeleteItem={(item) => handleDeletePrompt('announcements', item)}
+              onAddNew={() => handleOpenAddModal('announcements')}
+            />
+          )}
 
-        {currentTab === 'assignments' && (
-          <AssignmentsView
-            onEditItem={(item) => handleOpenEditModal('assignments', item)}
-            onDeleteItem={(item) => handleDeletePrompt('assignments', item)}
-            onAddNew={() => handleOpenAddModal('assignments')}
-          />
-        )}
+          {currentTab === 'assignments' && (
+            <AssignmentsView
+              onEditItem={(item) => handleOpenEditModal('assignments', item)}
+              onDeleteItem={(item) => handleDeletePrompt('assignments', item)}
+              onAddNew={() => handleOpenAddModal('assignments')}
+            />
+          )}
 
-        {currentTab === 'chat' && <ChatView />}
+          {currentTab === 'chat' && <ChatView />}
+        </div>
+
       </main>
 
       {/* Generic Add / Edit Record Modal */}
