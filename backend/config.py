@@ -19,7 +19,9 @@ class Settings:
     )
     
     # Server
-    PORT: int = int(os.getenv("PORT", 8000))
+    # Matches the frontend's default API base URL.  ``PORT`` still overrides
+    # this for deployments or an explicit uvicorn --port command.
+    PORT: int = int(os.getenv("PORT", 4000))
     HOST: str = os.getenv("HOST", "0.0.0.0")
     
     # AI Keys

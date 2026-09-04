@@ -8,7 +8,7 @@ from backend.models import Schedule
 from backend.schemas import ScheduleCreate, ScheduleUpdate, ScheduleResponse
 from backend.services.db_service import parse_time
 
-router = APIRouter(prefix="/schedules", tags=["Schedules"])
+router = APIRouter(tags=["Schedules"])
 
 @router.get("", response_model=list[ScheduleResponse])
 def get_schedules(

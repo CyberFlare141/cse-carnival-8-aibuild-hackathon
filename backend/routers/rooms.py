@@ -58,11 +58,18 @@ def get_room(room_id: str, db: Session = Depends(get_db)):
 
 @router.post("", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)
 def create_room(room_in: RoomCreate, db: Session = Depends(get_db)):
+    r_num = room_in.get_room_number()
+    if not r_num:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="room_number is required."
+        )
+
     # Check duplicate room_number
-    if db.query(Room).filter(Room.room_number == room_in.room_number).first():
+    if db.query(Room).filter(Room.room_number == r_num).first():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Room with number '{room_in.room_number}' already exists."
+            detail=f"Room with number '{r_num}' already exists."
         )
 
     # Generate ID if missing
@@ -83,7 +90,7 @@ def create_room(room_in: RoomCreate, db: Session = Depends(get_db)):
 
     new_room = Room(
         id=r_id,
-        room_number=room_in.room_number,
+        room_number=r_num,
         type=room_in.type.lower(),
         capacity=room_in.capacity,
         equipment=equipment_str,
@@ -108,16 +115,19 @@ def update_room(room_id: str, room_in: RoomUpdate, db: Session = Depends(get_db)
     if "equipment" in data and data["equipment"] is not None:
         data["equipment"] = json.dumps(data["equipment"])
 
-    if "room_number" in data and data["room_number"] != room.room_number:
+    r_num = room_in.get_room_number()
+    if r_num and r_num != room.room_number:
         # Check uniqueness
-        if db.query(Room).filter(Room.room_number == data["room_number"]).first():
+        if db.query(Room).filter(Room.room_number == r_num).first():
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Room number '{data['room_number']}' is already in use."
+                detail=f"Room number '{r_num}' is already in use."
             )
+        room.room_number = r_num
 
     for field, val in data.items():
-        setattr(room, field, val)
+        if field not in ("roomNumber", "room_number"):
+            setattr(room, field, val)
 
     room.updated_at = datetime.utcnow()
     db.commit()
@@ -138,25 +148,49 @@ def delete_room(room_id: str, db: Session = Depends(get_db)):
     return {"message": f"Room '{room_id}' successfully deleted.", "id": room_id}
 
 # ---------------------------------------------------------------------------
-# Room Actions: Booking & Cancellation
+# Room Actions: Booking & Cancellation (supports /book & /{room_id}/book)
 # ---------------------------------------------------------------------------
 @router.post("/book", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
-def book_room_action(payload: RoomBookingCreate, db: Session = Depends(get_db)):
+@router.post("/{room_id}/book", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
+def book_room_action(
+    payload: RoomBookingCreate,
+    room_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    target_room = room_id or payload.room_identifier
+    if not target_room:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="room_identifier is required either in URL path or request body."
+        )
+
     d = db_service.parse_date(payload.date)
-    st = db_service.parse_time(payload.start_time)
-    et = db_service.parse_time(payload.end_time)
+    st = db_service.parse_time(payload.get_start_time())
+    et = db_service.parse_time(payload.get_end_time())
 
     booking = db_service.book_room(
         db,
-        room_identifier=payload.room_identifier,
-        booked_by=payload.booked_by,
+        room_identifier=target_room,
+        booked_by=payload.get_booked_by(),
         target_date=d,
         start_time=st,
         end_time=et,
-        purpose=payload.purpose
+        purpose=payload.purpose or "Academic Session"
     )
     return booking
 
 @router.post("/cancel-booking", status_code=status.HTTP_200_OK)
-def cancel_booking_action(payload: RoomBookingCancel, db: Session = Depends(get_db)):
-    return db_service.cancel_room_booking(db, payload.booking_id)
+@router.post("/{room_id}/cancel-booking", status_code=status.HTTP_200_OK)
+def cancel_booking_action(
+    payload: RoomBookingCancel,
+    room_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    bk_id = payload.get_booking_id()
+    if not bk_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="booking_id is required."
+        )
+    return db_service.cancel_room_booking(db, bk_id)
+
